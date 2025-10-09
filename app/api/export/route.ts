@@ -44,7 +44,7 @@ export async function GET() {
 
     // Header row - each column separated by comma
     csvRows.push(
-      "ID Registro,Folio,Nombre Cliente,Num Personas,Monto Pagado,Fecha Registro,ID Codigo QR,Hash QR,Num Persona,Usado,Fecha Uso",
+      "ID Registro;Folio;Nombre Cliente;Num Personas;Monto Pagado;Fecha Registro;ID Codigo QR;Hash QR;Num Persona;Usado;Fecha Uso"
     )
 
     // Data rows
@@ -65,7 +65,7 @@ export async function GET() {
             qr.is_used ? "SI" : "NO",
             qr.used_at ? new Date(qr.used_at).toISOString() : "",
           ]
-          csvRows.push(row.join(","))
+          csvRows.push(row.join(";"))
         })
       }
     })

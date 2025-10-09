@@ -40,28 +40,22 @@ export function QRScanner() {
   const scanIntervalRef = useRef<number | null>(null)
 
   useEffect(() => {
-    return () => {
-      stopCamera()
-    }
+    return () => stopCamera()
   }, [])
 
   useEffect(() => {
-    if (isCameraOpen) {
-      startCamera()
-    } else {
-      stopCamera()
-    }
+    if (isCameraOpen) startCamera()
+    else stopCamera()
   }, [isCameraOpen])
 
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: "environment", width: 640, height: 480 },
       })
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         streamRef.current = stream
-
         videoRef.current.onloadedmetadata = () => {
           videoRef.current?.play()
           setIsScanning(true)
@@ -70,62 +64,51 @@ export function QRScanner() {
       }
     } catch (error) {
       console.error("Error accessing camera:", error)
-      alert("No se puede acceder a la cámara. Por favor verifica los permisos o usa entrada manual.")
+      alert("No se puede acceder a la cámara. Verifica permisos o usa entrada manual.")
       setIsCameraOpen(false)
     }
   }
 
   const startQRScanning = () => {
-    if (scanIntervalRef.current) {
-      cancelAnimationFrame(scanIntervalRef.current)
-    }
+    if (scanIntervalRef.current) clearInterval(scanIntervalRef.current)
 
     const scan = () => {
-      if (videoRef.current && canvasRef.current && isScanning && !isProcessing) {
-        const video = videoRef.current
-        const canvas = canvasRef.current
-        const ctx = canvas.getContext("2d")
+      if (!videoRef.current || !canvasRef.current || !isScanning || isProcessing) return
 
-        if (ctx && video.readyState === video.HAVE_ENOUGH_DATA) {
-          canvas.width = video.videoWidth
-          canvas.height = video.videoHeight
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      const ctx = canvas.getContext("2d")
+      if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return
 
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: "dontInvert",
-          })
+      // Canvas reducido para mejorar velocidad
+      canvas.width = video.videoWidth / 2
+      canvas.height = video.videoHeight / 2
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-          if (code && code.data) {
-            console.log("[v0] QR Code detected:", code.data)
-            setIsScanning(false)
-            validateQRCode(code.data.toUpperCase())
-            return
-          }
-        }
-      }
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" })
 
-      if (isScanning) {
-        scanIntervalRef.current = requestAnimationFrame(scan)
+      if (code && code.data) {
+        console.log("QR detected:", code.data)
+        setIsScanning(false)
+        validateQRCode(code.data.trim().toUpperCase())
       }
     }
 
-    scanIntervalRef.current = requestAnimationFrame(scan)
+    scanIntervalRef.current = window.setInterval(scan, 200) // cada 200ms
   }
 
   const stopCamera = () => {
     setIsScanning(false)
     if (scanIntervalRef.current) {
-      cancelAnimationFrame(scanIntervalRef.current)
+      clearInterval(scanIntervalRef.current)
       scanIntervalRef.current = null
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop())
       streamRef.current = null
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
-    }
+    if (videoRef.current) videoRef.current.srcObject = null
   }
 
   const validateQRCode = async (qrHash: string) => {
@@ -135,12 +118,9 @@ export function QRScanner() {
     try {
       const response = await fetch("/api/scan", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ qr_hash: qrHash }),
       })
-
       const data = await response.json()
 
       setScanResult({
@@ -158,18 +138,12 @@ export function QRScanner() {
       } else {
         setTimeout(() => {
           setIsScanning(true)
-          startQRScanning()
         }, 2000)
       }
     } catch (error) {
-      setScanResult({
-        success: false,
-        message: "Error al validar el código QR. Por favor intenta de nuevo.",
-      })
-      setTimeout(() => {
-        setIsScanning(true)
-        startQRScanning()
-      }, 2000)
+      console.error(error)
+      setScanResult({ success: false, message: "Error al validar el QR. Intenta de nuevo." })
+      setTimeout(() => setIsScanning(true), 2000)
     } finally {
       setIsProcessing(false)
     }
@@ -177,9 +151,7 @@ export function QRScanner() {
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (manualCode.trim()) {
-      validateQRCode(manualCode.trim().toUpperCase())
-    }
+    if (manualCode.trim()) validateQRCode(manualCode.trim().toUpperCase())
   }
 
   return (
@@ -187,7 +159,7 @@ export function QRScanner() {
       <Card>
         <CardHeader>
           <CardTitle>Escáner de Cámara</CardTitle>
-          <CardDescription>Usa la cámara de tu dispositivo para escanear códigos QR</CardDescription>
+          <CardDescription>Usa la cámara para escanear códigos QR</CardDescription>
         </CardHeader>
         <CardContent>
           <Button onClick={() => setIsCameraOpen(true)} className="w-full" size="lg">
@@ -218,11 +190,7 @@ export function QRScanner() {
               </div>
             </div>
             <div className="p-4 bg-black/80 text-white text-center text-sm">
-              {isProcessing
-                ? "Validando código..."
-                : isScanning
-                  ? "Escaneando... Posiciona el código QR dentro del marco"
-                  : "Cámara lista"}
+              {isProcessing ? "Validando código..." : isScanning ? "Escaneando..." : "Cámara lista"}
             </div>
           </div>
         </DialogContent>
@@ -278,7 +246,6 @@ export function QRScanner() {
                   {scanResult.success ? "✅ Entrada Aprobada" : "❌ Entrada Denegada"}
                 </h3>
                 <p className={`mb-4 ${scanResult.success ? "text-green-800" : "text-red-800"}`}>{scanResult.message}</p>
-
                 {scanResult.data && (
                   <div className="space-y-3 bg-white p-4 rounded-lg border">
                     <div className="flex items-center justify-between">
