@@ -92,8 +92,8 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
                   (qr) => `
                 QRCode.toCanvas(document.createElement('canvas'), '${qr.qr_hash}', {
                   width: 250,
-                  margin: 2,
-                  errorCorrectionLevel: 'H'
+                  margin: 4,
+                  errorCorrectionLevel: 'M'
                 }, function(error, canvas) {
                   if (!error) {
                     document.getElementById('qr-print-${qr.id}').appendChild(canvas);
@@ -238,7 +238,7 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
                   <Badge variant={qrCode.is_used ? "secondary" : "default"}>Persona {qrCode.person_number}</Badge>
                 </div>
                 <div className="bg-white p-4 rounded-lg border-2 border-gray-200">
-                  <QRCodeSVG id={`qr-${qrCode.id}`} value={qrCode.qr_hash} size={180} level="H" includeMargin={true} />
+                  <QRCodeSVG id={`qr-${qrCode.id}`} value={qrCode.qr_hash} size={150} level="M" marginSize={4}/>
                 </div>
                 <p className="text-lg font-mono font-bold mt-3 text-center tracking-wider">{qrCode.qr_hash}</p>
                 {qrCode.is_used && (

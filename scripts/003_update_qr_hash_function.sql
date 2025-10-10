@@ -17,7 +17,7 @@ begin
   
   -- Generate SHA256 hash and take first 8 characters for shorter code
   full_hash := encode(digest(hash_input, 'sha256'), 'hex');
-  qr_hash := upper(substring(full_hash from 1 for 8));
+  qr_hash := upper(substring(full_hash from 1 for 12));
   
   return qr_hash;
 end;

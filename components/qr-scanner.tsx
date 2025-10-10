@@ -81,8 +81,8 @@ export function QRScanner() {
       if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return
 
       // Canvas reducido para mejorar velocidad
-      canvas.width = video.videoWidth / 2
-      canvas.height = video.videoHeight / 2
+      canvas.width = video.videoWidth / 3
+      canvas.height = video.videoHeight / 3
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
@@ -95,7 +95,7 @@ export function QRScanner() {
       }
     }
 
-    scanIntervalRef.current = window.setInterval(scan, 200) // cada 200ms
+    scanIntervalRef.current = window.setInterval(scan, 300) // cada 200ms
   }
 
   const stopCamera = () => {
