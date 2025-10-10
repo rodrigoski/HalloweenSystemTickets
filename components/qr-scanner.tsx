@@ -1,7 +1,7 @@
 "use client"
 
-import type React from "react"
 import { useState, useRef, useEffect } from "react"
+import { BrowserMultiFormatReader, IScannerControls } from "@zxing/browser"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Camera, CheckCircle2, XCircle, Loader2, ScanLine, X } from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
-import jsQR from "jsqr"
 
 interface ScanResult {
   success: boolean
@@ -34,88 +33,120 @@ export function QRScanner() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const scanIntervalRef = useRef<number | null>(null)
 
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null)
+  const controlsRef = useRef<IScannerControls | null>(null)
+
+  // Cleanup on unmount
   useEffect(() => {
-    return () => stopCamera()
+    return () => {
+      stopScanner()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Start / stop scanner when modal opens/closes
   useEffect(() => {
-    if (isCameraOpen) startCamera()
-    else stopCamera()
+    if (isCameraOpen) startScanner()
+    else stopScanner()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCameraOpen])
 
-  const startCamera = async () => {
+  const startScanner = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: 640, height: 480 },
-      })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        streamRef.current = stream
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play()
-          setIsScanning(true)
-          startQRScanning()
-        }
+      if (!videoRef.current) return
+
+      // Create reader if not exists
+      if (!readerRef.current) readerRef.current = new BrowserMultiFormatReader()
+
+      // Define constraints instead of passing null deviceId (avoids TS null issue)
+      const constraints: MediaStreamConstraints = {
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
       }
-    } catch (error) {
-      console.error("Error accessing camera:", error)
-      alert("No se puede acceder a la cámara. Verifica permisos o usa entrada manual.")
+
+      // decodeFromConstraints returns controls (IScannerControls) that tienen stop()
+      const controls = await readerRef.current.decodeFromConstraints(
+        constraints,
+        videoRef.current,
+        (result, error, controlsFromCallback) => {
+          // Callback invocado continuamente mientras se detectan frame/resultado
+          if (result) {
+            // Evita lecturas dobles: detén el loop de detección inmediatamente
+            try {
+              controlsFromCallback?.stop?.()
+            } catch (e) {
+              // ignore
+            }
+            controlsRef.current = controlsFromCallback ?? controls
+            const text = result.getText?.()
+            if (text) {
+              validateQRCode(text.trim().toUpperCase())
+            }
+          } else if (error) {
+            // opcional: log errores menores
+            // console.debug("ZXing error:", error)
+          }
+        },
+      )
+
+      // guarda controles y marca scanning
+      controlsRef.current = controls
+      setIsScanning(true)
+    } catch (err) {
+      console.error("Error al iniciar el scanner:", err)
+      alert("No se pudo acceder a la cámara. Verifica permisos o usa entrada manual.")
       setIsCameraOpen(false)
     }
   }
 
-  const startQRScanning = () => {
-    if (scanIntervalRef.current) clearInterval(scanIntervalRef.current)
-
-    const scan = () => {
-      if (!videoRef.current || !canvasRef.current || !isScanning || isProcessing) return
-
-      const video = videoRef.current
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext("2d")
-      if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return
-
-      // Canvas reducido para mejorar velocidad
-      canvas.width = video.videoWidth / 3
-      canvas.height = video.videoHeight / 3
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" })
-
-      if (code && code.data) {
-        console.log("QR detected:", code.data)
-        setIsScanning(false)
-        validateQRCode(code.data.trim().toUpperCase())
-      }
-    }
-
-    scanIntervalRef.current = window.setInterval(scan, 300) // cada 200ms
-  }
-
-  const stopCamera = () => {
+  const stopScanner = () => {
     setIsScanning(false)
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current)
-      scanIntervalRef.current = null
+
+    // 1) Detén la API/loop de ZXing (si existe)
+    try {
+      controlsRef.current?.stop?.()
+    } catch (e) {
+      // ignore
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
+    controlsRef.current = null
+
+    // 2) También intenta detener cualquier método específico del reader (por compatibilidad)
+    try {
+      // algunos readers pueden exponer métodos como stopAsyncDecode() o stopContinuousDecode()
+      // @ts-ignore
+      readerRef.current?.stopContinuousDecode?.()
+    } catch (e) {
+      // ignore
     }
-    if (videoRef.current) videoRef.current.srcObject = null
+
+    // 3) Detén las pistas del stream y limpia el video element
+    try {
+      const video = videoRef.current
+      if (video && video.srcObject && (video.srcObject as MediaStream).getTracks) {
+        const ms = video.srcObject as MediaStream
+        ms.getTracks().forEach((t) => t.stop())
+      }
+      if (video) video.srcObject = null
+    } catch (e) {
+      // ignore
+    }
+
+    // No destruimos readerRef aquí por si quieres reusar la instancia; si prefieres recrearla:
+    // readerRef.current = null
   }
 
   const validateQRCode = async (qrHash: string) => {
+    if (isProcessing) return
     setIsProcessing(true)
     setScanResult(null)
 
     try {
+      // Llamada a tu endpoint /api/scan
       const response = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -130,20 +161,27 @@ export function QRScanner() {
       })
 
       if (response.ok) {
+        // Éxito: detén cámara y cierra modal
+        stopScanner()
         setIsCameraOpen(false)
+        // Limpia UI después de unos segundos
         setTimeout(() => {
           setScanResult(null)
           setManualCode("")
         }, 5000)
       } else {
+        // Si fallo (ej. ya usado), vuelve a reactivar lector para intentar de nuevo
         setTimeout(() => {
-          setIsScanning(true)
-        }, 2000)
+          // reinicia el scanner si el modal sigue abierto
+          if (isCameraOpen) startScanner()
+        }, 1200)
       }
     } catch (error) {
-      console.error(error)
+      console.error("Error validando QR:", error)
       setScanResult({ success: false, message: "Error al validar el QR. Intenta de nuevo." })
-      setTimeout(() => setIsScanning(true), 2000)
+      setTimeout(() => {
+        if (isCameraOpen) startScanner()
+      }, 1200)
     } finally {
       setIsProcessing(false)
     }
@@ -162,33 +200,37 @@ export function QRScanner() {
           <CardDescription>Usa la cámara para escanear códigos QR</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={() => setIsCameraOpen(true)} className="w-full" size="lg">
+          <Button onClick={() => setIsCameraOpen(true)} className="w-full" size="lg" disabled={isProcessing}>
             <Camera className="mr-2 h-5 w-5" />
             Abrir Cámara
           </Button>
         </CardContent>
       </Card>
 
-      <Dialog open={isCameraOpen} onOpenChange={setIsCameraOpen}>
+      <Dialog open={isCameraOpen} onOpenChange={(open) => setIsCameraOpen(open)}>
         <DialogContent className="max-w-[95vw] sm:max-w-2xl p-0 gap-0">
           <div className="relative bg-black">
             <Button
               variant="ghost"
               size="icon"
               className="absolute top-2 right-2 z-10 bg-black/50 hover:bg-black/70 text-white"
-              onClick={() => setIsCameraOpen(false)}
+              onClick={() => {
+                setIsCameraOpen(false)
+                stopScanner()
+              }}
             >
               <X className="h-4 w-4" />
             </Button>
+
             <div className="relative aspect-video w-full">
               <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-              <canvas ref={canvasRef} className="hidden" />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-48 h-48 sm:w-64 sm:h-64 border-4 border-orange-500 rounded-lg relative">
                   <ScanLine className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 text-orange-500 animate-pulse" />
                 </div>
               </div>
             </div>
+
             <div className="p-4 bg-black/80 text-white text-center text-sm">
               {isProcessing ? "Validando código..." : isScanning ? "Escaneando..." : "Cámara lista"}
             </div>
@@ -246,6 +288,7 @@ export function QRScanner() {
                   {scanResult.success ? "✅ Entrada Aprobada" : "❌ Entrada Denegada"}
                 </h3>
                 <p className={`mb-4 ${scanResult.success ? "text-green-800" : "text-red-800"}`}>{scanResult.message}</p>
+
                 {scanResult.data && (
                   <div className="space-y-3 bg-white p-4 rounded-lg border">
                     <div className="flex items-center justify-between">
@@ -265,9 +308,7 @@ export function QRScanner() {
                     {scanResult.data.qr_code.is_used && scanResult.data.qr_code.used_at && (
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">Usado previamente:</span>
-                        <span className="text-sm">
-                          {new Date(scanResult.data.qr_code.used_at).toLocaleString("es-MX")}
-                        </span>
+                        <span className="text-sm">{new Date(scanResult.data.qr_code.used_at).toLocaleString("es-MX")}</span>
                       </div>
                     )}
                   </div>
