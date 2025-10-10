@@ -7,6 +7,7 @@ import { Download, Share2, Printer } from "lucide-react"
 import type { Registration, QRCode } from "@/lib/types"
 import { QRCodeSVG } from "qrcode.react"
 import { useRef } from "react"
+import jsPDF from "jspdf"
 
 interface QRCodeDisplayProps {
   registration: Registration
@@ -16,102 +17,165 @@ interface QRCodeDisplayProps {
 export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
   const printRef = useRef<HTMLDivElement>(null)
 
-  const handleDownloadPDF = () => {
-    const printWindow = window.open("", "_blank")
-    if (!printWindow) {
-      alert("Por favor permite las ventanas emergentes para generar el PDF")
-      return
-    }
+  const handleDownloadPDF = async () => {
+    try {
+      const QRCodeLib = await import("qrcode")
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      })
 
-    const qrCodesHTML = qrCodes
-      .map(
-        (qr) => `
-      <div style="border: 2px solid #e5e7eb; padding: 20px; text-align: center; border-radius: 8px; page-break-inside: avoid; background: white; margin-bottom: 20px;">
-        <h3 style="margin: 0 0 15px 0; color: #f97316; font-size: 18px;">Persona ${qr.person_number}</h3>
-        <div style="display: flex; justify-content: center; margin-bottom: 15px;">
-          <div id="qr-print-${qr.id}"></div>
-        </div>
-        <div style="font-size: 16px; font-weight: bold; color: #1f2937; font-family: 'Courier New', monospace; letter-spacing: 2px; margin-top: 10px;">${qr.qr_hash}</div>
-      </div>
-    `,
+      const pageWidth = 210
+      const pageHeight = 297
+      const margin = 15
+      const contentWidth = pageWidth - 2 * margin
+
+      let yPosition = margin
+
+      // Header
+
+
+      // Info box
+      pdf.setFillColor(249, 250, 251) // #f9fafb - Light gray background
+      pdf.setDrawColor(229, 231, 235) // #e5e7eb - Border
+      pdf.roundedRect(margin, yPosition, contentWidth, 35, 2, 2, "FD")
+
+      const infoStartY = yPosition + 6
+      pdf.setFontSize(10)
+      pdf.setTextColor(55, 65, 81) // #374151
+
+      pdf.setFont("helvetica", "bold")
+      pdf.text("Folio:", margin + 5, infoStartY)
+      pdf.setFont("helvetica", "normal")
+      pdf.setTextColor(0, 0, 0)
+      pdf.text(registration.folio, margin + 50, infoStartY)
+
+      pdf.setTextColor(55, 65, 81)
+      pdf.setFont("helvetica", "bold")
+      pdf.text("Cliente:", margin + 5, infoStartY + 6)
+      pdf.setFont("helvetica", "normal")
+      pdf.setTextColor(0, 0, 0)
+      pdf.text(registration.client_name, margin + 50, infoStartY + 6)
+
+      pdf.setTextColor(55, 65, 81)
+      pdf.setFont("helvetica", "bold")
+      pdf.text("Número de Personas:", margin + 5, infoStartY + 12)
+      pdf.setFont("helvetica", "normal")
+      pdf.setTextColor(0, 0, 0)
+      pdf.text(registration.person_count.toString(), margin + 50, infoStartY + 12)
+
+      pdf.setTextColor(55, 65, 81)
+      pdf.setFont("helvetica", "bold")
+      pdf.text("Monto Pagado:", margin + 5, infoStartY + 18)
+      pdf.setFont("helvetica", "normal")
+      pdf.setTextColor(0, 0, 0)
+      pdf.text(`$${registration.amount_paid.toFixed(2)}`, margin + 50, infoStartY + 18)
+
+      pdf.setTextColor(55, 65, 81)
+      pdf.setFont("helvetica", "bold")
+      pdf.text("Fecha:", margin + 5, infoStartY + 24)
+      pdf.setFont("helvetica", "normal")
+      pdf.setTextColor(0, 0, 0)
+      pdf.text(new Date(registration.created_at).toLocaleDateString("es-MX"), margin + 50, infoStartY + 24)
+
+      yPosition += 45
+
+      // QR Codes - 2 por fila
+      const qrSize = 50 // mm
+      const qrBoxWidth = (contentWidth - 10) / 2
+      const qrBoxHeight = 75
+
+      for (let i = 0; i < qrCodes.length; i++) {
+        const qr = qrCodes[i]
+        const col = i % 2
+        const xPosition = margin + col * (qrBoxWidth + 10)
+
+        // Check if we need a new page
+        if (yPosition + qrBoxHeight > pageHeight - margin && i > 0) {
+          pdf.addPage()
+          yPosition = margin
+        }
+
+        // QR Box
+        pdf.setDrawColor(229, 231, 235) // #e5e7eb
+        pdf.setLineWidth(0.5)
+        pdf.roundedRect(xPosition, yPosition, qrBoxWidth, qrBoxHeight, 2, 2, "D")
+
+        // Person number
+        pdf.setFontSize(14)
+        pdf.setTextColor(249, 115, 22) // Orange
+        pdf.setFont("helvetica", "bold")
+        pdf.text(`Persona ${qr.person_number}`, xPosition + qrBoxWidth / 2, yPosition + 8, {
+          align: "center",
+        })
+
+        // Generate and add QR code
+        try {
+          const qrDataURL = await QRCodeLib.toDataURL(qr.qr_hash, {
+            width: 250,
+            margin: 1,
+            errorCorrectionLevel: "M",
+          })
+
+          const qrX = xPosition + (qrBoxWidth - qrSize) / 2
+          const qrY = yPosition + 12
+
+          pdf.addImage(qrDataURL, "PNG", qrX, qrY, qrSize, qrSize)
+        } catch (error) {
+          console.error("Error generating QR:", error)
+        }
+
+        // QR Hash text
+        pdf.setFontSize(9)
+        pdf.setTextColor(31, 41, 55) // #1f2937
+        pdf.setFont("courier", "bold")
+        const hashY = yPosition + 12 + qrSize + 5
+        pdf.text(qr.qr_hash, xPosition + qrBoxWidth / 2, hashY, { align: "center" })
+
+        // Move to next row after 2 QR codes
+        if (col === 1 || i === qrCodes.length - 1) {
+          yPosition += qrBoxHeight + 10
+        }
+      }
+
+      // Footer
+      if (yPosition + 25 > pageHeight - margin) {
+        pdf.addPage()
+        yPosition = margin
+      }
+
+      pdf.setDrawColor(229, 231, 235)
+      pdf.line(margin, yPosition, pageWidth - margin, yPosition)
+      yPosition += 8
+
+      pdf.setFontSize(9)
+      pdf.setTextColor(107, 114, 128) // #6b7280
+      pdf.setFont("helvetica", "bold")
+      pdf.text(
+        "Por favor presenta estos códigos QR en la entrada del evento.",
+        pageWidth / 2,
+        yPosition,
+        { align: "center" }
       )
-      .join("")
+      yPosition += 5
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Códigos QR - ${registration.folio}</title>
-          <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; padding: 30px; max-width: 900px; margin: 0 auto; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #f97316; padding-bottom: 20px; }
-            .header h1 { color: #f97316; margin-bottom: 5px; font-size: 28px; }
-            .header p { color: #666; font-size: 14px; }
-            .info { background: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #e5e7eb; }
-            .info-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
-            .info-row:last-child { margin-bottom: 0; }
-            .info-row strong { color: #374151; }
-            .qr-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px; margin-bottom: 30px; }
-            .footer { margin-top: 30px; text-align: center; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; padding-top: 20px; }
-            .footer p { margin-bottom: 5px; }
-            @media print {
-              body { padding: 15px; }
-              .qr-item { page-break-inside: avoid; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>🎃 Evento Halloween</h1>
-            <p>Códigos QR para Entrada</p>
-          </div>
-          
-          <div class="info">
-            <div class="info-row"><strong>Folio:</strong><span>${registration.folio}</span></div>
-            <div class="info-row"><strong>Cliente:</strong><span>${registration.client_name}</span></div>
-            <div class="info-row"><strong>Número de Personas:</strong><span>${registration.person_count}</span></div>
-            <div class="info-row"><strong>Monto Pagado:</strong><span>$${registration.amount_paid.toFixed(2)}</span></div>
-            <div class="info-row"><strong>Fecha:</strong><span>${new Date(registration.created_at).toLocaleDateString("es-MX")}</span></div>
-          </div>
+      pdf.setFont("helvetica", "normal")
+      pdf.text("Cada código QR solo puede usarse una vez.", pageWidth / 2, yPosition, {
+        align: "center",
+      })
+      yPosition += 5
 
-          <div class="qr-grid">${qrCodesHTML}</div>
+      pdf.text("Guarda este documento para tu referencia.", pageWidth / 2, yPosition, {
+        align: "center",
+      })
 
-          <div class="footer">
-            <p><strong>Por favor presenta estos códigos QR en la entrada del evento.</strong></p>
-            <p>Cada código QR solo puede usarse una vez.</p>
-            <p>Guarda este documento para tu referencia.</p>
-          </div>
-
-          <script>
-            window.onload = function() {
-              ${qrCodes
-                .map(
-                  (qr) => `
-                QRCode.toCanvas(document.createElement('canvas'), '${qr.qr_hash}', {
-                  width: 250,
-                  margin: 4,
-                  errorCorrectionLevel: 'M'
-                }, function(error, canvas) {
-                  if (!error) {
-                    document.getElementById('qr-print-${qr.id}').appendChild(canvas);
-                  }
-                });
-              `,
-                )
-                .join("")}
-              
-              setTimeout(function() {
-                window.print();
-              }, 1000);
-            };
-          </script>
-        </body>
-      </html>
-    `)
-    printWindow.document.close()
+      // Save PDF
+      pdf.save(`QR-Codes-${registration.folio}.pdf`)
+    } catch (error) {
+      console.error("Error generando PDF:", error)
+      alert("Error al generar el PDF. Por favor intenta de nuevo.")
+    }
   }
 
   const handleDownloadIndividualQR = async (qrCode: QRCode) => {
@@ -167,6 +231,7 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
             }
           })
         }
+
         img.src = url
       }
     } catch (error) {
@@ -208,14 +273,16 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
             </div>
             <div className="p-4 bg-accent/50 rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Fecha de Registro</p>
-              <p className="text-lg font-semibold">{new Date(registration.created_at).toLocaleDateString("es-MX")}</p>
+              <p className="text-lg font-semibold">
+                {new Date(registration.created_at).toLocaleDateString("es-MX")}
+              </p>
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
             <Button onClick={handleDownloadPDF} className="flex-1">
               <Printer className="mr-2 h-4 w-4" />
-              Imprimir/Guardar PDF
+              Descargar PDF
             </Button>
             <Button onClick={handleShareWhatsApp} variant="outline" className="flex-1 bg-transparent">
               <Share2 className="mr-2 h-4 w-4" />
@@ -228,19 +295,34 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
       <Card>
         <CardHeader>
           <CardTitle>Códigos QR</CardTitle>
-          <CardDescription>Un código QR por persona - cada código solo puede usarse una vez</CardDescription>
+          <CardDescription>
+            Un código QR por persona - cada código solo puede usarse una vez
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {qrCodes.map((qrCode) => (
-              <div key={qrCode.id} className="flex flex-col items-center p-6 border rounded-lg bg-white">
+              <div
+                key={qrCode.id}
+                className="flex flex-col items-center p-6 border rounded-lg bg-white"
+              >
                 <div className="mb-3">
-                  <Badge variant={qrCode.is_used ? "secondary" : "default"}>Persona {qrCode.person_number}</Badge>
+                  <Badge variant={qrCode.is_used ? "secondary" : "default"}>
+                    Persona {qrCode.person_number}
+                  </Badge>
                 </div>
                 <div className="bg-white p-4 rounded-lg border-2 border-gray-200">
-                  <QRCodeSVG id={`qr-${qrCode.id}`} value={qrCode.qr_hash} size={150} level="M" marginSize={4}/>
+                  <QRCodeSVG
+                    id={`qr-${qrCode.id}`}
+                    value={qrCode.qr_hash}
+                    size={150}
+                    level="M"
+                    marginSize={4}
+                  />
                 </div>
-                <p className="text-lg font-mono font-bold mt-3 text-center tracking-wider">{qrCode.qr_hash}</p>
+                <p className="text-lg font-mono font-bold mt-3 text-center tracking-wider">
+                  {qrCode.qr_hash}
+                </p>
                 {qrCode.is_used && (
                   <Badge variant="destructive" className="mt-2">
                     Usado

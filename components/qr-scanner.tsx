@@ -152,23 +152,25 @@ export function QRScanner() {
       })
 
       const data = await response.json()
+      const success = response.ok
+
       setScanResult({
-        success: response.ok,
+        success,
         message: data.message || data.error || "Error desconocido",
         data: data.data,
       })
 
-      if (response.ok) {
-        stopScanner()
-        setIsCameraOpen(false)
-        setTimeout(() => {
-          setScanResult(null)
-          setManualCode("")
-        }, 5000)
-      } else {
-        setTimeout(() => {
-          if (isCameraOpen) startScanner(selectedDeviceId)
-        }, 1200)
+      // 🔹 Cerrar cámara y limpiar mensaje en ambos casos
+      stopScanner()
+      setIsCameraOpen(false)
+      setTimeout(() => {
+        setScanResult(null)
+        setManualCode("")
+      }, 5000) // el mensaje desaparece después de 5s
+
+      // Si fue error, puedes reiniciar la cámara si quieres
+      if (!success && isCameraOpen) {
+        setTimeout(() => startScanner(selectedDeviceId), 1200)
       }
     } catch (error) {
       console.error("Error validando QR:", error)
@@ -176,13 +178,16 @@ export function QRScanner() {
         success: false,
         message: "Error al validar el QR. Intenta de nuevo.",
       })
-      setTimeout(() => {
-        if (isCameraOpen) startScanner(selectedDeviceId)
-      }, 1200)
+
+      // También cerrar cámara y ocultar mensaje si hubo error
+      stopScanner()
+      setIsCameraOpen(false)
+      setTimeout(() => setScanResult(null), 5000)
     } finally {
       setIsProcessing(false)
     }
   }
+
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault()
