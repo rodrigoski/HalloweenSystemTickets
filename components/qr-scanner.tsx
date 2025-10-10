@@ -57,44 +57,28 @@ export function QRScanner() {
     try {
       if (!videoRef.current) return
 
-      // Create reader if not exists
-      if (!readerRef.current) readerRef.current = new BrowserMultiFormatReader()
+      if (!readerRef.current)
+        readerRef.current = new BrowserMultiFormatReader()
 
-      // Define constraints instead of passing null deviceId (avoids TS null issue)
       const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
+        video: { facingMode: { ideal: "environment" } },
       }
 
-      // decodeFromConstraints returns controls (IScannerControls) that tienen stop()
-      const controls = await readerRef.current.decodeFromConstraints(
-        constraints,
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      videoRef.current.srcObject = stream
+      await videoRef.current.play()
+
+      const controls = await readerRef.current.decodeFromVideoElement(
         videoRef.current,
         (result, error, controlsFromCallback) => {
-          // Callback invocado continuamente mientras se detectan frame/resultado
           if (result) {
-            // Evita lecturas dobles: detén el loop de detección inmediatamente
-            try {
-              controlsFromCallback?.stop?.()
-            } catch (e) {
-              // ignore
-            }
-            controlsRef.current = controlsFromCallback ?? controls
+            controlsFromCallback?.stop?.()
             const text = result.getText?.()
-            if (text) {
-              validateQRCode(text.trim().toUpperCase())
-            }
-          } else if (error) {
-            // opcional: log errores menores
-            // console.debug("ZXing error:", error)
+            if (text) validateQRCode(text.trim().toUpperCase())
           }
-        },
+        }
       )
 
-      // guarda controles y marca scanning
       controlsRef.current = controls
       setIsScanning(true)
     } catch (err) {
@@ -107,38 +91,20 @@ export function QRScanner() {
   const stopScanner = () => {
     setIsScanning(false)
 
-    // 1) Detén la API/loop de ZXing (si existe)
     try {
       controlsRef.current?.stop?.()
-    } catch (e) {
-      // ignore
-    }
+    } catch {}
+
     controlsRef.current = null
 
-    // 2) También intenta detener cualquier método específico del reader (por compatibilidad)
-    try {
-      // algunos readers pueden exponer métodos como stopAsyncDecode() o stopContinuousDecode()
-      // @ts-ignore
-      readerRef.current?.stopContinuousDecode?.()
-    } catch (e) {
-      // ignore
+    const video = videoRef.current
+    if (video?.srcObject) {
+      const stream = video.srcObject as MediaStream
+      stream.getTracks().forEach((track) => track.stop())
+      video.srcObject = null
     }
-
-    // 3) Detén las pistas del stream y limpia el video element
-    try {
-      const video = videoRef.current
-      if (video && video.srcObject && (video.srcObject as MediaStream).getTracks) {
-        const ms = video.srcObject as MediaStream
-        ms.getTracks().forEach((t) => t.stop())
-      }
-      if (video) video.srcObject = null
-    } catch (e) {
-      // ignore
-    }
-
-    // No destruimos readerRef aquí por si quieres reusar la instancia; si prefieres recrearla:
-    // readerRef.current = null
   }
+
 
   const validateQRCode = async (qrHash: string) => {
     if (isProcessing) return
