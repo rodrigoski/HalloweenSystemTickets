@@ -277,14 +277,14 @@ export function QRScanner() {
         <CardContent>
           <form onSubmit={handleManualSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="qrCode">Código QR (8 caracteres)</Label>
+              <Label htmlFor="qrCode">Código QR (12 caracteres)</Label>
               <Input
                 id="qrCode"
-                placeholder="Ej: A1B2C3D4"
+                placeholder="Ej: A1B2C3D4E5F6"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value.toUpperCase())}
                 disabled={isProcessing}
-                maxLength={8}
+                maxLength={12}
                 className="uppercase font-mono text-lg"
               />
             </div>

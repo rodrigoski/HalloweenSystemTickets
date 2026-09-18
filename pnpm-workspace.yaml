@@ -1,0 +1,6 @@
+# Scripts de instalación autorizados. pnpm 10+ los bloquea por defecto.
+# Sin esto, `pnpm build` falla con ERR_PNPM_IGNORED_BUILDS antes de compilar.
+allowBuilds:
+  '@tailwindcss/oxide': true   # binario nativo que compila el CSS de Tailwind v4
+  sharp: true                  # procesamiento de imágenes
+  core-js: false               # sólo imprime un banner al instalar

@@ -65,19 +65,48 @@ export async function POST(request: Request) {
       )
     }
 
-    // Mark as used
-    const { error: updateError } = await supabase
+    // Mark as used. The `is_used = false` condition makes this the actual
+    // validation: if two scans race, only one update matches a row.
+    const usedAt = new Date().toISOString()
+    const { data: claimed, error: updateError } = await supabase
       .from("qr_codes")
       .update({
         is_used: true,
-        used_at: new Date().toISOString(),
+        used_at: usedAt,
         used_by: user.id,
       })
       .eq("id", qrCode.id)
+      .eq("is_used", false)
+      .select("used_at")
 
     if (updateError) {
       console.error("Error updating QR code:", updateError)
       return NextResponse.json({ error: "Error al marcar el código QR como usado" }, { status: 500 })
+    }
+
+    // No rows updated means another scan claimed it first.
+    if (!claimed || claimed.length === 0) {
+      const { data: current } = await supabase
+        .from("qr_codes")
+        .select("used_at")
+        .eq("id", qrCode.id)
+        .single()
+
+      return NextResponse.json(
+        {
+          error: "Código QR ya usado",
+          message: "Este código QR ya fue usado para entrada.",
+          data: {
+            registration: qrCode.registrations,
+            qr_code: {
+              person_number: qrCode.person_number,
+              is_used: true,
+              used_at: current?.used_at ?? null,
+            },
+          },
+        },
+        { status: 400 },
+      )
     }
 
     return NextResponse.json({
@@ -87,7 +116,7 @@ export async function POST(request: Request) {
         qr_code: {
           person_number: qrCode.person_number,
           is_used: true,
-          used_at: new Date().toISOString(),
+          used_at: usedAt,
         },
       },
     })
