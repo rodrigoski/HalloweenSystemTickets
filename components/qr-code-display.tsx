@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Download, Share2, Printer } from "lucide-react"
 import type { Registration, QRCode } from "@/lib/types"
-import { QRCodeSVG } from "qrcode.react"
+import { InvitationTicket } from "@/components/invitation-ticket"
+import { renderHeaderCanvas, renderTicketCanvas } from "@/lib/invitation"
 import { useRef } from "react"
 import jsPDF from "jspdf"
 
@@ -14,12 +15,22 @@ interface QRCodeDisplayProps {
   qrCodes: QRCode[]
 }
 
+/** Genera el PNG del QR con corrección de errores alta (soporta el fondo). */
+async function buildQRDataURL(qrHash: string) {
+  const QRCodeLib = await import("qrcode")
+  return QRCodeLib.toDataURL(qrHash, {
+    width: 512,
+    margin: 1,
+    errorCorrectionLevel: "H",
+    color: { dark: "#000000ff", light: "#ffffffff" },
+  })
+}
+
 export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
   const printRef = useRef<HTMLDivElement>(null)
 
   const handleDownloadPDF = async () => {
     try {
-      const QRCodeLib = await import("qrcode")
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -33,8 +44,23 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
 
       let yPosition = margin
 
-      // Header
-
+      // Encabezado con la imagen de la invitación
+      try {
+        const headerCanvas = await renderHeaderCanvas({
+          folio: registration.folio,
+          qrCount: qrCodes.length,
+        })
+        const headerHeight = 45
+        pdf.addImage(headerCanvas.toDataURL("image/png"), "PNG", margin, yPosition, contentWidth, headerHeight)
+        yPosition += headerHeight + 10
+      } catch (error) {
+        console.error("Error generando encabezado:", error)
+        pdf.setFontSize(18)
+        pdf.setTextColor(249, 115, 22)
+        pdf.setFont("helvetica", "bold")
+        pdf.text("INVITACIÓN · CÓDIGOS DE ENTRADA", pageWidth / 2, yPosition + 8, { align: "center" })
+        yPosition += 18
+      }
 
       // Info box
       pdf.setFillColor(249, 250, 251) // #f9fafb - Light gray background
@@ -79,63 +105,44 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
       pdf.setTextColor(0, 0, 0)
       pdf.text(new Date(registration.created_at).toLocaleDateString("es-MX"), margin + 50, infoStartY + 24)
 
-      yPosition += 45
+      yPosition += 47
 
-      // QR Codes - 2 por fila
-      const qrSize = 50 // mm
-      const qrBoxWidth = (contentWidth - 10) / 2
-      const qrBoxHeight = 75
+      // Invitaciones - 2 por fila (imagen de fondo + QR)
+      const ticketWidth = (contentWidth - 10) / 2
+      const ticketHeight = (ticketWidth * 1200) / 800
 
       for (let i = 0; i < qrCodes.length; i++) {
         const qr = qrCodes[i]
         const col = i % 2
-        const xPosition = margin + col * (qrBoxWidth + 10)
+        const xPosition = margin + col * (ticketWidth + 10)
 
         // Check if we need a new page
-        if (yPosition + qrBoxHeight > pageHeight - margin && i > 0) {
+        if (yPosition + ticketHeight > pageHeight - margin && i > 0) {
           pdf.addPage()
           yPosition = margin
         }
 
-        // QR Box
-        pdf.setDrawColor(229, 231, 235) // #e5e7eb
-        pdf.setLineWidth(0.5)
-        pdf.roundedRect(xPosition, yPosition, qrBoxWidth, qrBoxHeight, 2, 2, "D")
-
-        // Person number
-        pdf.setFontSize(14)
-        pdf.setTextColor(249, 115, 22) // Orange
-        pdf.setFont("helvetica", "bold")
-        pdf.text(`Persona ${qr.person_number}`, xPosition + qrBoxWidth / 2, yPosition + 8, {
-          align: "center",
-        })
-
-        // Generate and add QR code
         try {
-          const qrDataURL = await QRCodeLib.toDataURL(qr.qr_hash, {
-            width: 250,
-            margin: 1,
-            errorCorrectionLevel: "M",
+          const qrDataURL = await buildQRDataURL(qr.qr_hash)
+          const ticketCanvas = await renderTicketCanvas({
+            folio: registration.folio,
+            clientName: registration.client_name,
+            personNumber: qr.person_number,
+            personCount: registration.person_count,
+            qrHash: qr.qr_hash,
+            qrDataUrl: qrDataURL,
+            isUsed: qr.is_used,
+            scale: 2,
           })
 
-          const qrX = xPosition + (qrBoxWidth - qrSize) / 2
-          const qrY = yPosition + 12
-
-          pdf.addImage(qrDataURL, "PNG", qrX, qrY, qrSize, qrSize)
+          pdf.addImage(ticketCanvas.toDataURL("image/png"), "PNG", xPosition, yPosition, ticketWidth, ticketHeight)
         } catch (error) {
-          console.error("Error generating QR:", error)
+          console.error("Error generando invitación:", error)
         }
-
-        // QR Hash text
-        pdf.setFontSize(9)
-        pdf.setTextColor(31, 41, 55) // #1f2937
-        pdf.setFont("courier", "bold")
-        const hashY = yPosition + 12 + qrSize + 5
-        pdf.text(qr.qr_hash, xPosition + qrBoxWidth / 2, hashY, { align: "center" })
 
         // Move to next row after 2 QR codes
         if (col === 1 || i === qrCodes.length - 1) {
-          yPosition += qrBoxHeight + 10
+          yPosition += ticketHeight + 10
         }
       }
 
@@ -180,60 +187,32 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
 
   const handleDownloadIndividualQR = async (qrCode: QRCode) => {
     try {
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
-      if (!ctx) return
+      const qrDataURL = await buildQRDataURL(qrCode.qr_hash)
 
-      canvas.width = 400
-      canvas.height = 500
-
-      // White background
-      ctx.fillStyle = "white"
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-      // Draw header text
-      ctx.fillStyle = "black"
-      ctx.font = "bold 20px Arial"
-      ctx.textAlign = "center"
-      ctx.fillText(`${registration.folio}`, canvas.width / 2, 30)
-      ctx.font = "16px Arial"
-      ctx.fillText(`Persona ${qrCode.person_number}`, canvas.width / 2, 55)
-
-      // Get QR code SVG element
-      const svgElement = document.querySelector(`#qr-${qrCode.id}`) as SVGElement
-      if (svgElement) {
-        const svgData = new XMLSerializer().serializeToString(svgElement)
-        const img = new Image()
-        const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" })
-        const url = URL.createObjectURL(svgBlob)
-
-        img.onload = () => {
-          ctx.drawImage(img, 50, 70, 300, 300)
-          URL.revokeObjectURL(url)
-
-          // Add QR code text
-          ctx.font = "bold 16px monospace"
-          ctx.fillText(qrCode.qr_hash, canvas.width / 2, 400)
-          ctx.font = "14px Arial"
-          ctx.fillText(registration.client_name, canvas.width / 2, 430)
-
-          // Download
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const downloadUrl = URL.createObjectURL(blob)
-              const a = document.createElement("a")
-              a.href = downloadUrl
-              a.download = `${registration.folio}-Persona-${qrCode.person_number}.png`
-              document.body.appendChild(a)
-              a.click()
-              URL.revokeObjectURL(downloadUrl)
-              document.body.removeChild(a)
-            }
+      const ticketCanvas = await renderTicketCanvas({
+        folio: registration.folio,
+        clientName: registration.client_name,
+        personNumber: qrCode.person_number,
+        personCount: registration.person_count,
+            qrHash: qrCode.qr_hash,
+            qrDataUrl: qrDataURL,
+            isUsed: qrCode.is_used,
+            scale: 2,
+            ticketType: (registration.ticket_type as any) || (qrCode.ticket_type as any),
           })
-        }
 
-        img.src = url
-      }
+      ticketCanvas.toBlob((blob) => {
+        if (blob) {
+          const downloadUrl = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = downloadUrl
+          a.download = `${registration.folio}-Invitacion-Persona-${qrCode.person_number}.png`
+          document.body.appendChild(a)
+          a.click()
+          URL.revokeObjectURL(downloadUrl)
+          document.body.removeChild(a)
+        }
+      }, "image/png")
     } catch (error) {
       console.error("Error downloading QR:", error)
       alert("Error al descargar el código QR.")
@@ -262,7 +241,7 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div className="p-4 bg-accent/50 rounded-lg">
               <p className="text-sm text-muted-foreground mb-1">Número de Personas</p>
               <p className="text-2xl font-bold">{registration.person_count}</p>
@@ -278,12 +257,28 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
               </p>
             </div>
           </div>
+          {registration.created_by_email && (
+            <div className="mb-6 p-4 bg-accent/50 rounded-lg">
+              <p className="text-sm text-muted-foreground mb-1">Registrado por</p>
+              <p className="text-sm font-medium break-all">{registration.created_by_email}</p>
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-3">
             <Button onClick={handleDownloadPDF} className="flex-1">
               <Printer className="mr-2 h-4 w-4" />
               Descargar PDF
             </Button>
+            {qrCodes[0] && (
+              <Button
+                variant="outline"
+                className="flex-1 bg-transparent"
+                onClick={() => handleDownloadIndividualQR(qrCodes[0])}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Descargar Imagen
+              </Button>
+            )}
             <Button onClick={handleShareWhatsApp} variant="outline" className="flex-1 bg-transparent">
               <Share2 className="mr-2 h-4 w-4" />
               Compartir por WhatsApp
@@ -294,52 +289,32 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Códigos QR</CardTitle>
+          <CardTitle>Invitaciones</CardTitle>
           <CardDescription>
-            Un código QR por persona - cada código solo puede usarse una vez
+            Una invitación por persona - cada código solo puede usarse una vez
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {qrCodes.map((qrCode) => (
-              <div
-                key={qrCode.id}
-                className="flex flex-col items-center p-6 border rounded-lg bg-white"
-              >
-                <div className="mb-3">
-                  <Badge variant={qrCode.is_used ? "secondary" : "default"}>
+              <InvitationTicket key={qrCode.id} registration={registration} qrCode={qrCode}>
+                <div className="flex items-center gap-2">
+                  <Badge variant={qrCode.is_used ? "destructive" : "secondary"}>
                     Persona {qrCode.person_number}
                   </Badge>
+                  {!qrCode.is_used && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-auto bg-transparent"
+                      onClick={() => handleDownloadIndividualQR(qrCode)}
+                    >
+                      <Download className="mr-2 h-3 w-3" />
+                      Descargar invitación
+                    </Button>
+                  )}
                 </div>
-                <div className="bg-white p-4 rounded-lg border-2 border-gray-200">
-                  <QRCodeSVG
-                    id={`qr-${qrCode.id}`}
-                    value={qrCode.qr_hash}
-                    size={150}
-                    level="M"
-                    marginSize={4}
-                  />
-                </div>
-                <p className="text-lg font-mono font-bold mt-3 text-center tracking-wider">
-                  {qrCode.qr_hash}
-                </p>
-                {qrCode.is_used && (
-                  <Badge variant="destructive" className="mt-2">
-                    Usado
-                  </Badge>
-                )}
-                {!qrCode.is_used && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 w-full bg-transparent"
-                    onClick={() => handleDownloadIndividualQR(qrCode)}
-                  >
-                    <Download className="mr-2 h-3 w-3" />
-                    Descargar
-                  </Button>
-                )}
-              </div>
+              </InvitationTicket>
             ))}
           </div>
         </CardContent>

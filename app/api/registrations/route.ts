@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { client_name, person_count, amount_paid } = body
+    const { client_name, person_count, amount_paid, ticket_type = "general" } = body
 
     // Validate input
     if (!client_name || !person_count || amount_paid === undefined) {
@@ -75,6 +75,8 @@ export async function POST(request: Request) {
         person_count,
         amount_paid,
         created_by: user.id,
+        created_by_email: user.email,
+        ticket_type: ticket_type === "vip" ? "vip" : "general",
       })
       .select()
       .single()
@@ -103,6 +105,7 @@ export async function POST(request: Request) {
           registration_id: registration.id,
           qr_hash: qrHash,
           person_number: i,
+          ticket_type: registration.ticket_type || ticket_type,
         })
         .select()
         .single()

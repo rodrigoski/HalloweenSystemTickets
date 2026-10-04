@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+
 import { Loader2 } from "lucide-react"
 
 export function RegistrationForm() {
@@ -18,6 +19,7 @@ export function RegistrationForm() {
     clientName: "",
     personCount: "",
     amountPaid: "",
+    ticketType: "general" as "general" | "vip",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,6 +37,7 @@ export function RegistrationForm() {
           client_name: formData.clientName,
           person_count: Number.parseInt(formData.personCount),
           amount_paid: Number.parseFloat(formData.amountPaid),
+          ticket_type: formData.ticketType,
         }),
       })
 
@@ -98,6 +101,19 @@ export function RegistrationForm() {
               value={formData.amountPaid}
               onChange={(e) => setFormData({ ...formData, amountPaid: e.target.value })}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="ticketType">Tipo de Entrada</Label>
+            <select
+              id="ticketType"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              value={formData.ticketType}
+              onChange={(e) => setFormData({ ...formData, ticketType: e.target.value as "general" | "vip" })}
+            >
+              <option value="general">General</option>
+              <option value="vip">VIP</option>
+            </select>
           </div>
 
           {error && <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>}

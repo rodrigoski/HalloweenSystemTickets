@@ -54,7 +54,8 @@ El panel se actualiza **en tiempo real**: mientras alguien escanea en la puerta,
 | Framework | Next.js 15 (App Router) + React 19 + TypeScript |
 | Estilos | Tailwind CSS v4 + shadcn/ui (Radix) |
 | Base de datos y auth | Supabase (Postgres + Auth + Realtime) |
-| Generación de QR | `qrcode.react` (pantalla) y `qrcode` (PDF) |
+| Generación de QR | `qrcode.react` (pantalla) y `qrcode` (PDF/PNG) |
+| Invitaciones | imagen de fondo `public/image.png` + canvas (`lib/invitation.ts`) |
 | Lectura de QR | `@zxing/browser` |
 | PDF | `jspdf` |
 | Hosting | Vercel |
@@ -314,7 +315,8 @@ Se llena sola mediante triggers. Guarda cada INSERT, UPDATE y DELETE sobre `regi
 │   └── scan/                escáner
 ├── components/
 │   ├── qr-scanner.tsx       cámara (@zxing) + entrada manual
-│   ├── qr-code-display.tsx  QR en pantalla, PDF, PNG, WhatsApp
+│   ├── qr-code-display.tsx  invitaciones en pantalla, PDF, PNG, WhatsApp
+│   ├── invitation-ticket.tsx boleto con imagen de fondo (vista web)
 │   ├── registration-form.tsx
 │   ├── dashboard-stats.tsx  tarjetas de totales (tiempo real)
 │   ├── registrations-list.tsx
@@ -323,6 +325,7 @@ Se llena sola mediante triggers. Guarda cada INSERT, UPDATE y DELETE sobre `regi
 │   └── ui/                  componentes de shadcn/ui
 ├── lib/
 │   ├── supabase/            clientes de navegador, servidor y middleware
+│   ├── invitation.ts        render del boleto con imagen de fondo (PDF/PNG)
 │   └── types.ts             tipos de TypeScript
 ├── scripts/                 los SQL que hay que correr en Supabase
 └── middleware.ts            protege todas las rutas salvo /auth/*

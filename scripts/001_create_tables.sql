@@ -1,4 +1,4 @@
--- Create registrations table to store client registrations
+﻿-- Create registrations table to store client registrations
 create table if not exists public.registrations (
   id uuid primary key default gen_random_uuid(),
   folio text unique not null,
@@ -7,6 +7,7 @@ create table if not exists public.registrations (
   amount_paid numeric(10, 2) not null check (amount_paid >= 0),
   created_at timestamptz default now() not null,
   created_by uuid references auth.users(id) on delete set null,
+  created_by_email text,
   updated_at timestamptz default now() not null
 );
 

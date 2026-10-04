@@ -6,6 +6,8 @@ export interface Registration {
   amount_paid: number
   created_at: string
   created_by: string | null
+  created_by_email?: string | null
+  ticket_type?: "general" | "vip"
   updated_at: string
 }
 
@@ -18,6 +20,7 @@ export interface QRCode {
   used_at: string | null
   used_by: string | null
   created_at: string
+  ticket_type?: "general" | "vip"
 }
 
 export interface AuditLog {
