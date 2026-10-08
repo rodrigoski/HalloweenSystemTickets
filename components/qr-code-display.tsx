@@ -251,9 +251,12 @@ export function QRCodeDisplay({ registration, qrCodes }: QRCodeDisplayProps) {
               <p className="text-2xl font-bold">${registration.amount_paid.toFixed(2)}</p>
             </div>
             <div className="p-4 bg-accent/50 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Fecha de Registro</p>
+              <p className="text-sm text-muted-foreground mb-1">Fecha y Hora de Registro</p>
               <p className="text-lg font-semibold">
-                {new Date(registration.created_at).toLocaleDateString("es-MX")}
+                {new Date(registration.created_at).toLocaleString("es-MX", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
               </p>
             </div>
           </div>

@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { getRole, isAdmin } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { RegistrationsList } from "@/components/registrations-list"
 import { DashboardStats } from "@/components/dashboard-stats"
 import { RecentActivity } from "@/components/recent-activity"
 import { ExportImportTools } from "@/components/export-import-tools"
+import { Ticket } from "lucide-react"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -18,6 +22,9 @@ export default async function DashboardPage() {
     redirect("/auth/login")
   }
 
+  const admin = isAdmin(user)
+  const role = getRole(user)
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-purple-50">
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-10">
@@ -27,6 +34,7 @@ export default async function DashboardPage() {
             <p className="text-xs sm:text-sm text-muted-foreground">Sistema de Gestión de Eventos</p>
           </div>
           <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Badge variant={admin ? "default" : "secondary"}>{admin ? "Admin" : "Vendedor"}</Badge>
             <span className="text-xs sm:text-sm text-muted-foreground truncate max-w-[150px] sm:max-w-none">
               {user.email}
             </span>
@@ -40,37 +48,65 @@ export default async function DashboardPage() {
       </header>
 
       <main className="container mx-auto px-4 py-6 sm:py-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold">Panel de Control</h2>
-            <p className="text-sm text-muted-foreground">Gestiona registros y escanea códigos QR</p>
-          </div>
-          <div className="flex gap-3 w-full sm:w-auto flex-col sm:flex-row">
-            <Button asChild variant="outline" className="w-full sm:w-auto bg-transparent">
-              <Link href="/scan">Escanear QR</Link>
-            </Button>
-            <Button asChild className="w-full sm:w-auto">
-              <Link href="/register">Nuevo Registro</Link>
-            </Button>
-          </div>
-        </div>
+        {admin ? (
+          <>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-bold">Panel de Control</h2>
+                <p className="text-sm text-muted-foreground">Gestiona registros y escanea códigos QR</p>
+              </div>
+              <div className="flex gap-3 w-full sm:w-auto flex-col sm:flex-row">
+                <Button asChild variant="outline" className="w-full sm:w-auto bg-transparent">
+                  <Link href="/scan">Escanear QR</Link>
+                </Button>
+                <Button asChild className="w-full sm:w-auto">
+                  <Link href="/register">Nuevo Registro</Link>
+                </Button>
+              </div>
+            </div>
 
-        <div className="grid gap-6 mb-6">
-          <DashboardStats />
-        </div>
+            <div className="grid gap-6 mb-6">
+              <DashboardStats />
+            </div>
 
-        <div className="mb-6">
-          <ExportImportTools />
-        </div>
+            <div className="mb-6">
+              <ExportImportTools />
+            </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 order-2 lg:order-1">
-            <RegistrationsList />
-          </div>
-          <div className="order-1 lg:order-2">
-            <RecentActivity />
-          </div>
-        </div>
+            <div className="grid lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 order-2 lg:order-1">
+                <RegistrationsList />
+              </div>
+              <div className="order-1 lg:order-2">
+                <RecentActivity />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mb-6">
+              <h2 className="text-2xl sm:text-3xl font-bold">Hola, {role === "vendedor" ? "Vendedor" : "Usuario"}</h2>
+              <p className="text-sm text-muted-foreground">Registra boletos para el evento Halloween</p>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Ticket className="h-5 w-5 text-orange-600" />
+                  Registrar nuevo boleto
+                </CardTitle>
+                <CardDescription>
+                  Tu función es registrar boletos. Los boletos, cifras y escaneos los consulta el administrador.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild className="w-full sm:w-auto">
+                  <Link href="/register">Nuevo Registro</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </main>
     </div>
   )

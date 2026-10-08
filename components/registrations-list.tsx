@@ -149,11 +149,21 @@ export function RegistrationsList() {
                     <h3 className="font-semibold">{registration.client_name}</h3>
                     <Badge variant="secondary">{registration.folio}</Badge>
                   </div>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                     <span>{registration.person_count} personas</span>
                     <span>${registration.amount_paid.toFixed(2)}</span>
-                    <span>{new Date(registration.created_at).toLocaleDateString("es-MX")}</span>
+                    <span>
+                      {new Date(registration.created_at).toLocaleString("es-MX", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </span>
                   </div>
+                  {registration.created_by_email && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Registrado por <span className="font-medium">{registration.created_by_email}</span>
+                    </p>
+                  )}
                 </div>
                 <Button asChild variant="outline" size="sm">
                   <Link href={`/registrations/${registration.id}`}>

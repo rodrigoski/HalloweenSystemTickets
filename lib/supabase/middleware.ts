@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import { isAdmin } from "@/lib/auth"
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -32,6 +33,13 @@ export async function updateSession(request: NextRequest) {
   if (!user && !request.nextUrl.pathname.startsWith("/auth")) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
+    return NextResponse.redirect(url)
+  }
+
+  const adminOnlyPaths = ["/scan"]
+  if (user && !isAdmin(user) && adminOnlyPaths.some((path) => request.nextUrl.pathname.startsWith(path))) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/dashboard"
     return NextResponse.redirect(url)
   }
 

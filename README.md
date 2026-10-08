@@ -137,8 +137,9 @@ create extension if not exists pgcrypto with schema extensions;
 | 1 | `scripts/001_create_tables.sql` | Tablas `registrations`, `qr_codes`, `audit_logs`, índices y reglas de seguridad (RLS) |
 | 2 | `scripts/002_create_functions.sql` | Funciones para generar folios y hashes, y los triggers de auditoría |
 | 3 | `scripts/003_update_qr_hash_function.sql` | Reemplaza la función de hash por una versión corta (12 caracteres) |
+| 4 | `scripts/004_roles.sql` | Roles `admin` / `vendedor`, RLS por rol y email de quien crea cada registro |
 
-> El paso 3 **sobrescribe** una función del paso 2. Es intencional — igual tienes que ejecutar los tres, en orden.
+> Los pasos 3 y 4 **sobrescriben** funciones/policies de los pasos anteriores. Es intencional — igual tienes que ejecutar todos, en orden.
 
 ### Paso 6 — Activar Realtime
 
@@ -161,6 +162,25 @@ Para que el panel se actualice solo cuando alguien escanea:
 3. **Marca la casilla "Auto Confirm User"**. Si no lo haces, Supabase esperará una confirmación por correo y no podrás entrar.
 
 Repite para cada persona que vaya a usar el sistema (taquilla, puerta, etc.).
+
+#### Asignar roles
+
+Hay dos roles (se configuran con `scripts/004_roles.sql`):
+
+| Rol | Puede |
+|---|---|
+| `admin` | Ver todos los boletos, cifras, logs, quién registró cada boleto (correo, día y hora) y escanear QR |
+| `vendedor` | **Únicamente** registrar boletos (y ver los QR de lo que él mismo registró) |
+
+- Todos los usuarios creados **antes** de correr `004_roles.sql` quedan como `admin`.
+- Por defecto, un usuario sin rol se trata como `vendedor` (mínimo privilegio).
+- Para asignar un rol, ejecuta en el **SQL Editor**:
+
+```sql
+select public.set_user_role('correo@ejemplo.com', 'vendedor');
+-- o
+select public.set_user_role('correo@ejemplo.com', 'admin');
+```
 
 ### Paso 8 — Arrancar
 
@@ -325,6 +345,7 @@ Se llena sola mediante triggers. Guarda cada INSERT, UPDATE y DELETE sobre `regi
 │   └── ui/                  componentes de shadcn/ui
 ├── lib/
 │   ├── supabase/            clientes de navegador, servidor y middleware
+│   ├── auth.ts              helpers de rol (admin / vendedor)
 │   ├── invitation.ts        render del boleto con imagen de fondo (PDF/PNG)
 │   └── types.ts             tipos de TypeScript
 ├── scripts/                 los SQL que hay que correr en Supabase
@@ -334,6 +355,8 @@ Se llena sola mediante triggers. Guarda cada INSERT, UPDATE y DELETE sobre `regi
 ### Cómo funciona la protección de rutas
 
 `middleware.ts` intercepta **todas** las peticiones excepto `/auth/*` y archivos estáticos. Si no hay sesión, redirige a `/auth/login`. Además, cada página verifica la sesión otra vez en el servidor, y cada ruta de API responde `401` si no hay usuario.
+
+Los roles se verifican en tres capas: el middleware y las páginas redirigen al vendedor fuera de las zonas de admin (`/scan`), las APIs de admin responden `403`, y las políticas RLS de Postgres filtran los datos (el vendedor sólo puede leer los registros que él mismo creó).
 
 ---
 

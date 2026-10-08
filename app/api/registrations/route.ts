@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { isAdmin } from "@/lib/auth"
 
 export async function GET() {
   try {
@@ -11,6 +12,10 @@ export async function GET() {
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (!isAdmin(user)) {
+      return NextResponse.json({ error: "Se requiere rol de administrador" }, { status: 403 })
     }
 
     const { data: registrations, error } = await supabase

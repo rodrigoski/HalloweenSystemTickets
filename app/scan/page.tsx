@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { isAdmin } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
@@ -14,6 +15,10 @@ export default async function ScanPage() {
 
   if (!user) {
     redirect("/auth/login")
+  }
+
+  if (!isAdmin(user)) {
+    redirect("/dashboard")
   }
 
   return (

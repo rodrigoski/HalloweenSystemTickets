@@ -10,6 +10,7 @@ interface AuditLog {
   id: string
   action: string
   table_name: string
+  user_email: string | null
   created_at: string
   new_data: {
     client_name?: string
@@ -123,10 +124,18 @@ export function RecentActivity() {
                   <div className="flex items-start justify-between gap-2">
                     {getActionBadge(log.action)}
                     <span className="text-xs text-muted-foreground">
-                      {new Date(log.created_at).toLocaleTimeString("es-MX")}
+                      {new Date(log.created_at).toLocaleString("es-MX", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
                     </span>
                   </div>
                   <p className="text-sm">{getActivityDescription(log)}</p>
+                  {log.user_email && (
+                    <p className="text-xs text-muted-foreground">
+                      Por <span className="font-medium">{log.user_email}</span>
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
